@@ -26,19 +26,19 @@ export default class PydoctestLoader {
         this.initialize(subscriptions);
     }
 
-    private initialize(subscriptions: vscode.Disposable[]): void {
-        vscode.workspace.onDidChangeConfiguration(this.reinitialize, this, subscriptions);
-        this.registerEventListeners();
-        this.analyzeActiveEditors();
+    private async initialize(subscriptions: vscode.Disposable[]): Promise<void> {
+        const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
+        if (!pydoctestExists) {
+            vscode.window.showErrorMessage('pydoctest was not found.');
+            console.error("Pydoctest not found")
+            return;
+        }
 
-        this.pydoctestAnalyzer.analyzeWorkspace();
-    }
-
-    private reinitialize(): void {
-        this.dispose();
         this.registerEventListeners();
         this.analyzeActiveEditors();
         this.registerTasks();
+
+        this.pydoctestAnalyzer.analyzeWorkspace();
     }
 
     private registerTasks(): void {
@@ -80,17 +80,17 @@ export default class PydoctestLoader {
         disposables.push(
             vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
                 if (editor !== undefined) {
-                    this.pydoctestAnalyzer.analyze(editor);
+                    this.pydoctestAnalyzer.analyzeEditor(editor);
                 }
             }),
             vscode.workspace.onDidChangeTextDocument((event: vscode.TextDocumentChangeEvent) => {
                 if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == event.document) {
-                    this.pydoctestAnalyzer.analyze(vscode.window.activeTextEditor);
+                    this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
                 }
             }),
             vscode.workspace.onDidOpenTextDocument((document: vscode.TextDocument) => {
                 if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == document) {
-                    this.pydoctestAnalyzer.analyze(vscode.window.activeTextEditor);
+                    this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
                 }
             })
         );
@@ -99,7 +99,7 @@ export default class PydoctestLoader {
 
     private analyzeActiveEditors(): void {
         vscode.window.visibleTextEditors.forEach((editor: vscode.TextEditor) => {
-            this.pydoctestAnalyzer.analyze(editor);
+            this.pydoctestAnalyzer.analyzeEditor(editor);
         });
     }
 
@@ -128,7 +128,6 @@ class PydoctestBuildTaskTerminal implements vscode.Pseudoterminal {
 	}
 
 	close(): void {
-		// The terminal has been closed. Shutdown the build.
 		if (this.fileWatcher) {
 			this.fileWatcher.dispose();
 		}
