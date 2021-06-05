@@ -1,24 +1,37 @@
 import * as vscode from 'vscode';
 import { CancellationToken, DocumentHighlight, Hover, HoverProvider, ProviderResult, TextDocument } from 'vscode';
 
-export function analyze(filePath: string | null = null) {
-    vscode.window.showInformationMessage('pydoctest!');
-
-    vscode.languages.registerDocumentHighlightProvider('python', {
-        provideDocumentHighlights(document: TextDocument, position: vscode.Position, token: CancellationToken): ProviderResult<DocumentHighlight[]> {
-            return new Promise(resolve => {
-                resolve([new DocumentHighlight(new vscode.Range(
-                    5, 0, 5, 10
-                ))]);
-            });
-        }
+function getTextEditorDecorationType(backgroundColor: string, borderColor: string): vscode.TextEditorDecorationType {
+    return vscode.window.createTextEditorDecorationType({
+        borderRadius: "3px",
+        borderWidth: "1px",
+        borderStyle: "solid",
+        backgroundColor: backgroundColor,
+        borderColor: borderColor
     });
+}
 
-    let b: HoverProvider = {
-        provideHover(doc, pos, token): ProviderResult<Hover> {
-            return new Promise(resolve => {
-                resolve(new Hover('Hello World'));
-             });
-        }
+function getRanges(document: vscode.TextDocument): vscode.Range[] {
+    return [
+        new vscode.Range(
+            5, 0, 5, 10
+        )
+    ]
+}
+
+export default class PydoctestAnalyzer {
+
+    constructor() {}
+
+    public analyze(editor: vscode.TextEditor): void {
+        console.log(`Analyzing ${editor.document.uri.path}`);
+        vscode.window.showInformationMessage('pydoctest!');
+        editor.setDecorations(getTextEditorDecorationType("rgba(255,0,0,0.3)", "rgba(255,100,100,0.15)"), getRanges(editor.document));
+    }
+
+    public analyzeWorkspace(): void {
+        console.log(`Analyzing workspace`);
+
+        console.log(`Done analyzing workspace.`);
     }
 }
