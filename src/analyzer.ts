@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { Readable, pipeline } from 'stream';
 import * as vscode from 'vscode';
 import { CancellationToken, DocumentHighlight, Hover, HoverProvider, ProviderResult, TextDocument } from 'vscode';
-import { ValidationResult } from './results';
+import { ResultType, ValidationResult } from './results';
 
 function getTextEditorDecorationType(backgroundColor: string, borderColor: string): vscode.TextEditorDecorationType {
     return vscode.window.createTextEditorDecorationType({
@@ -14,12 +14,30 @@ function getTextEditorDecorationType(backgroundColor: string, borderColor: strin
     });
 }
 
-function getRanges(document: vscode.TextDocument): vscode.Range[] {
-    return [
-        new vscode.Range(
-            5, 0, 5, 10
-        )
-    ]
+function getRanges(result: ValidationResult): vscode.Range[] {
+    const ranges: vscode.Range[] = [];
+    if (result.result != ResultType.FAILED) return [];
+
+    result.module_results.forEach(m_r => {
+        if (m_r.result == ResultType.FAILED) {
+            m_r.function_results.forEach(fn_r => {
+                if (fn_r.result == ResultType.FAILED && fn_r.range) {
+                    ranges.push(new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, fn_r.range.end_character));
+                }
+            });
+
+            m_r.class_results.forEach(cl_r => {
+                if (cl_r.result == ResultType.FAILED) {
+                    cl_r.function_results.forEach(fn_r => {
+                        if (fn_r.result == ResultType.FAILED && fn_r.range) {
+                            ranges.push(new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, fn_r.range.end_character));
+                        }
+                    });
+                }
+            });
+        }
+    });
+    return ranges;
 }
 
 interface ExecutionConfiguration {
@@ -35,7 +53,9 @@ export default class PydoctestAnalyzer {
     private decorate(result: ValidationResult, editor: vscode.TextEditor | null): void {
         vscode.window.showInformationMessage('pydoctest!');
         if (editor) {
-            editor.setDecorations(getTextEditorDecorationType("rgba(255,0,0,0.3)", "rgba(255,100,100,0.15)"), getRanges(editor.document));
+            const type = getTextEditorDecorationType("rgba(255,0,0,0.3)", "rgba(255,100,100,0.15)")
+            editor.setDecorations(type, [])
+            editor.setDecorations(type, getRanges(result));
         }
     }
 
@@ -66,8 +86,8 @@ export default class PydoctestAnalyzer {
             command += ` --file ${config.module}`;
         }
         const result = await this.executeAsync(command, config.workingDirectory ?? '.');
-        console.log(result);
-        const obj = JSON.parse(result);
+        const obj: ValidationResult = JSON.parse(result);
+        console.log(obj);
         return obj;
     }
 
