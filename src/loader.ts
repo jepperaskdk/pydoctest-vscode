@@ -83,12 +83,7 @@ export default class PydoctestLoader {
                     this.pydoctestAnalyzer.analyzeEditor(editor);
                 }
             }),
-            vscode.workspace.onDidChangeTextDocument((event: vscode.TextDocumentChangeEvent) => {
-                if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == event.document) {
-                    this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
-                }
-            }),
-            vscode.workspace.onDidOpenTextDocument((document: vscode.TextDocument) => {
+            vscode.workspace.onDidSaveTextDocument((document: vscode.TextDocument) => {
                 if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == document) {
                     this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
                 }
