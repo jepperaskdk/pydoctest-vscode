@@ -38,7 +38,7 @@ export default class PydoctestLoader {
         this.analyzeActiveEditors();
         this.registerTasks();
 
-        this.pydoctestAnalyzer.analyzeWorkspace();
+        // this.pydoctestAnalyzer.analyzeWorkspace();
     }
 
     private registerTasks(): void {

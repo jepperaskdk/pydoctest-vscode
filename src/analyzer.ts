@@ -24,6 +24,7 @@ function getRanges(document: vscode.TextDocument): vscode.Range[] {
 
 interface ExecutionConfiguration {
     workingDirectory?: string | null;
+    module?: string | null;
 }
 
 export default class PydoctestAnalyzer {
@@ -43,9 +44,9 @@ export default class PydoctestAnalyzer {
         if (!modulePath.endsWith('.py')) return;
 
         console.log(`Analyzing ${modulePath}`);
-        // const result = await this.executeGetResult({});
-        // if (result == null) return;
-        // this.decorate(result, editor);
+        const result = await this.executeGetResult({ module: modulePath });
+        if (result == null) return;
+        this.decorate(result, editor);
     }
 
     public async analyzeWorkspace(): Promise<void> {
@@ -60,7 +61,12 @@ export default class PydoctestAnalyzer {
     }
 
     public async executeGetResult(config: ExecutionConfiguration): Promise<ValidationResult | null> {
-        const result = await this.executeAsync('pydoctest --reporter json', config.workingDirectory ?? '.');
+        let command = 'pydoctest --reporter json';
+        if (config.module) {
+            command += ` --file ${config.module}`;
+        }
+        const result = await this.executeAsync(command, config.workingDirectory ?? '.');
+        console.log(result);
         const obj = JSON.parse(result);
         return obj;
     }
