@@ -4,40 +4,59 @@ import * as vscode from 'vscode';
 import { CancellationToken, DocumentHighlight, Hover, HoverProvider, ProviderResult, TextDocument } from 'vscode';
 import { ResultType, ValidationResult } from './results';
 
-function getTextEditorDecorationType(backgroundColor: string, borderColor: string): vscode.TextEditorDecorationType {
-    return vscode.window.createTextEditorDecorationType({
-        borderRadius: "3px",
-        borderWidth: "1px",
-        borderStyle: "solid",
-        backgroundColor: backgroundColor,
-        borderColor: borderColor
-    });
+
+const errorDecorationType = vscode.window.createTextEditorDecorationType({
+    borderRadius: "3px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    backgroundColor: "rgba(255,0,0,0.3)",
+    borderColor: "rgba(255,100,100,0.15)"
+});
+
+const diagnosticsCollection = vscode.languages.createDiagnosticCollection('pydoctest');
+
+
+interface PydoctestDiagnosticItem {
+    diagnosticItems: vscode.Diagnostic[];
+    uri: vscode.Uri;
 }
 
-function getRanges(result: ValidationResult): vscode.Range[] {
-    const ranges: vscode.Range[] = [];
+
+function getDiagnosticsItems(result: ValidationResult): PydoctestDiagnosticItem[] {
+    const items: PydoctestDiagnosticItem[] = [];
     if (result.result != ResultType.FAILED) return [];
 
     result.module_results.forEach(m_r => {
+        const moduleResult: PydoctestDiagnosticItem = {
+            uri: vscode.Uri.file(m_r.module_path),
+            diagnosticItems: []
+        };
+
         if (m_r.result == ResultType.FAILED) {
             m_r.function_results.forEach(fn_r => {
                 if (fn_r.result == ResultType.FAILED && fn_r.range) {
-                    ranges.push(new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, fn_r.range.end_character));
+                    const range = new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, 80);
+                    const item = new vscode.Diagnostic(range, fn_r.fail_reason, vscode.DiagnosticSeverity.Error);
+                    moduleResult.diagnosticItems.push(item);
                 }
             });
 
-            m_r.class_results.forEach(cl_r => {
+            m_r.class_results.forEach(cl_r => { 
                 if (cl_r.result == ResultType.FAILED) {
                     cl_r.function_results.forEach(fn_r => {
                         if (fn_r.result == ResultType.FAILED && fn_r.range) {
-                            ranges.push(new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, fn_r.range.end_character));
+                            const range = new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, 80);
+                            const item = new vscode.Diagnostic(range, fn_r.fail_reason, vscode.DiagnosticSeverity.Error);
+                            moduleResult.diagnosticItems.push(item);
                         }
                     });
                 }
             });
+
+            items.push(moduleResult);
         }
     });
-    return ranges;
+    return items;
 }
 
 interface ExecutionConfiguration {
@@ -51,11 +70,12 @@ export default class PydoctestAnalyzer {
     }
 
     private decorate(result: ValidationResult, editor: vscode.TextEditor | null): void {
-        vscode.window.showInformationMessage('pydoctest!');
+        diagnosticsCollection.clear();
         if (editor) {
-            const type = getTextEditorDecorationType("rgba(255,0,0,0.3)", "rgba(255,100,100,0.15)")
-            editor.setDecorations(type, [])
-            editor.setDecorations(type, getRanges(result));
+            const diagnosticItems = getDiagnosticsItems(result);
+            diagnosticItems.forEach(i => {
+                diagnosticsCollection.set(i.uri, i.diagnosticItems);
+            });
         }
     }
 
