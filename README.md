@@ -14,7 +14,12 @@ Install pydoctest.
 
 ## Extension Settings
 
-Coming soon..
+Navigate to settings, search "pydoctest" or add directly to settings.json
+
+Working directory:
+```
+"pydoctest.workingDirectory": "path-to-execute-pydoctest",
+```
 
 License
 -------
