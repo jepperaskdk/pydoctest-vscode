@@ -24,7 +24,17 @@
 					}
 				}
 			}
-		]
+		],
+		"configuration": {
+			"title": "Pydoctest",
+			"properties": {
+				"pydoctest.workingDirectory": {
+					"type": "string",
+					"default": ".",
+					"description": "The directory to execute pydoctest in."
+				}
+			}
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
