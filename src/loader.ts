@@ -3,22 +3,35 @@
 import * as vscode from 'vscode';
 import { TaskDefinition } from 'vscode';
 import PydoctestAnalyzer from './analyzer';
-import { PydoctestTaskProvider } from './pydoctestProvider';
 
-interface PydoctestTaskDefinition extends TaskDefinition {
+export interface PydoctestTaskDefinition extends TaskDefinition {
     module: string;
 }
+
+export interface PydoctestConfiguration {
+    workingDirectory: string;
+}
+
+const diagnosticsCollection = vscode.languages.createDiagnosticCollection('pydoctest');
+const outputChannel = vscode.window.createOutputChannel('pydoctest');
+const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration('pydoctest');
 
 export default class PydoctestLoader {
 
     private pydoctestAnalyzer: PydoctestAnalyzer;
     private listenerDisposables: vscode.Disposable[] | undefined;
-    private pydoctestTasks: vscode.Task[] | undefined;
-    private pydoctestTaskProvider: vscode.Disposable | undefined;
+    private configuration: PydoctestConfiguration;
 
+    constructor() {
+        this.configuration = this.getConfiguration();
+        this.pydoctestAnalyzer = new PydoctestAnalyzer(outputChannel, diagnosticsCollection, this.configuration);
+    }
 
-    constructor(private workspaceRoot: string) {
-        this.pydoctestAnalyzer = new PydoctestAnalyzer();
+    public getConfiguration(): PydoctestConfiguration {
+        const configuration = {
+            workingDirectory: config.get<string>('workingDirectory', ".")
+        };
+        return configuration;
     }
 
     public activate(subscriptions: vscode.Disposable[]): void {
@@ -30,49 +43,14 @@ export default class PydoctestLoader {
         const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
         if (!pydoctestExists) {
             vscode.window.showErrorMessage('pydoctest was not found.');
-            console.error("Pydoctest not found")
+            outputChannel.append("Pydoctest not found\n")
             return;
         }
 
         this.registerEventListeners();
         this.analyzeActiveEditors();
-        this.registerTasks();
 
-        // this.pydoctestAnalyzer.analyzeWorkspace();
-    }
-
-    private registerTasks(): void {
-        this.pydoctestTaskProvider = vscode.tasks.registerTaskProvider(PydoctestTaskProvider.PydoctestType, new PydoctestTaskProvider("."));
-
-        vscode.tasks.registerTaskProvider('pydoctest.analyze.workspace', {
-            provideTasks: () => {
-              if (!this.pydoctestTasks) {
-                this.pydoctestTasks = [
-                    new vscode.Task({ type: "pydoctest" }, vscode.TaskScope.Workspace, "",
-                        "", new vscode.CustomExecution(async (): Promise<vscode.Pseudoterminal> => {
-                            // When the task is executed, this callback will run. Here, we setup for running the task.
-                            return new PydoctestBuildTaskTerminal(this.workspaceRoot);
-                        }))
-                ];
-              }
-              return this.pydoctestTasks;
-            },
-            resolveTask(_task: vscode.Task): vscode.Task | undefined {
-              const task = _task.definition.task;
-              if (task) {
-                // resolveTask requires that the same definition object be used.
-                const definition: PydoctestTaskDefinition = <any>_task.definition;
-                return new vscode.Task(
-                  definition,
-                  _task.scope ?? vscode.TaskScope.Workspace,
-                  definition.task,
-                  'pydoctest',
-                  new vscode.ShellExecution(`pydoctest`)
-                );
-              }
-              return undefined;
-            }
-          });
+        this.pydoctestAnalyzer.analyzeWorkspace();
     }
 
     private registerEventListeners(): void {
@@ -87,6 +65,9 @@ export default class PydoctestLoader {
                 if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == document) {
                     this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
                 }
+            }),
+            vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
+                this.configuration = this.getConfiguration();
             })
         );
         this.listenerDisposables = disposables;

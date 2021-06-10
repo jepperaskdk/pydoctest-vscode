@@ -1,19 +1,7 @@
 import { exec } from 'child_process';
-import { Readable, pipeline } from 'stream';
 import * as vscode from 'vscode';
-import { CancellationToken, DocumentHighlight, Hover, HoverProvider, ProviderResult, TextDocument } from 'vscode';
-import { ResultType, ValidationResult } from './results';
-
-
-const errorDecorationType = vscode.window.createTextEditorDecorationType({
-    borderRadius: "3px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    backgroundColor: "rgba(255,0,0,0.3)",
-    borderColor: "rgba(255,100,100,0.15)"
-});
-
-const diagnosticsCollection = vscode.languages.createDiagnosticCollection('pydoctest');
+import { PydoctestConfiguration } from './loader';
+import { Result, ResultType, ValidationResult } from './results';
 
 
 interface PydoctestDiagnosticItem {
@@ -41,7 +29,7 @@ function getDiagnosticsItems(result: ValidationResult): PydoctestDiagnosticItem[
                 }
             });
 
-            m_r.class_results.forEach(cl_r => { 
+            m_r.class_results.forEach(cl_r => {
                 if (cl_r.result == ResultType.FAILED) {
                     cl_r.function_results.forEach(fn_r => {
                         if (fn_r.result == ResultType.FAILED && fn_r.range) {
@@ -65,16 +53,14 @@ interface ExecutionConfiguration {
 }
 
 export default class PydoctestAnalyzer {
-    constructor() {
-
-    }
+    constructor(public outputChannel: vscode.OutputChannel, public diagnosticsCollection: vscode.DiagnosticCollection, public configuration: PydoctestConfiguration) {}
 
     private decorate(result: ValidationResult, editor: vscode.TextEditor | null): void {
-        diagnosticsCollection.clear();
+        this.diagnosticsCollection.clear();
         if (editor) {
             const diagnosticItems = getDiagnosticsItems(result);
             diagnosticItems.forEach(i => {
-                diagnosticsCollection.set(i.uri, i.diagnosticItems);
+                this.diagnosticsCollection.set(i.uri, i.diagnosticItems);
             });
         }
     }
@@ -83,21 +69,32 @@ export default class PydoctestAnalyzer {
         const modulePath = editor.document.uri.path
         if (!modulePath.endsWith('.py')) return;
 
-        console.log(`Analyzing ${modulePath}`);
+        this.outputChannel.append(`Analyzing ${modulePath}\n`);
         const result = await this.executeGetResult({ module: modulePath });
-        if (result == null) return;
-        this.decorate(result, editor);
+        if (result) {
+            if (result.result == ResultType.FAILED && result.module_results.length > 0) {
+                this.outputChannel.append(`Result was: ${result?.module_results[0].fail_reason}\n`)
+            } else {
+                this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
+            }
+            this.decorate(result, editor);
+        }
     }
 
     public async analyzeWorkspace(): Promise<void> {
-        console.log(`Analyzing workspace`);
-
         const workspaceRoots: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders;
         const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.'
 
+        this.outputChannel.append(`Analyzing workspace: ${workspaceRoot}\n`);
         const result = await this.executeGetResult({ workingDirectory: workspaceRoot });
-        if (result == null) return;
-        this.decorate(result, null);
+        if (result) {
+            if (result.result == ResultType.FAILED && result.module_results.length > 0) {
+                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
+            } else {
+                this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
+            }
+            this.decorate(result, null);
+        }
     }
 
     public async executeGetResult(config: ExecutionConfiguration): Promise<ValidationResult | null> {
@@ -107,7 +104,6 @@ export default class PydoctestAnalyzer {
         }
         const result = await this.executeAsync(command, config.workingDirectory ?? '.');
         const obj: ValidationResult = JSON.parse(result);
-        console.log(obj);
         return obj;
     }
 
@@ -130,7 +126,7 @@ export default class PydoctestAnalyzer {
     }
 
     public async pydoctestExists(): Promise<boolean> {
-        const result = await this.executeAsync('pydoctest -h', '.');
+        const result = await this.executeAsync('pydoctest -h', this.configuration.workingDirectory);
         return result.includes('usage: pydoctest');
     }
 }
