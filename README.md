@@ -21,6 +21,11 @@ Working directory:
 "pydoctest.workingDirectory": "path-to-execute-pydoctest",
 ```
 
+## Issues
+
+Please create an issue if you find errors with the plugin.
+Opening the "Output" tab and selecting "pydoctest" in the dropdown, may provide useful information to include.
+
 License
 -------
 
