@@ -66,17 +66,13 @@ export default class PydoctestAnalyzer {
     }
 
     public async analyzeEditor(editor: vscode.TextEditor): Promise<void> {
-        const modulePath = editor.document.uri.path
+        const modulePath = editor.document.fileName;
         if (!modulePath.endsWith('.py')) return;
 
         this.outputChannel.append(`Analyzing ${modulePath}\n`);
         const result = await this.executeGetResult({ module: modulePath });
         if (result) {
-            if (result.result == ResultType.FAILED && result.module_results.length > 0) {
-                this.outputChannel.append(`Result was: ${result?.module_results[0].fail_reason}\n`)
-            } else {
-                this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
-            }
+            this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
             this.decorate(result, editor);
         }
     }
@@ -126,7 +122,8 @@ export default class PydoctestAnalyzer {
     }
 
     public async pydoctestExists(): Promise<boolean> {
-        const result = await this.executeAsync('pydoctest -h', this.configuration.workingDirectory);
+        this.outputChannel.append('Testing if pydoctest is installed..');
+        const result = await this.executeAsync('pydoctest -h', '.');
         return result.includes('usage: pydoctest');
     }
 }
