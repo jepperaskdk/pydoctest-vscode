@@ -43,7 +43,7 @@ export default class PydoctestLoader {
         const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
         if (!pydoctestExists) {
             vscode.window.showErrorMessage('pydoctest was not found.');
-            outputChannel.append("Pydoctest not found\n")
+            outputChannel.appendLine("Pydoctest not found")
             return;
         }
 
