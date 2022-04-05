@@ -10,6 +10,7 @@ export interface PydoctestTaskDefinition extends TaskDefinition {
 
 export interface PydoctestConfiguration {
     workingDirectory: string;
+    pythonInterpreterPath?: string | null;
 }
 
 const diagnosticsCollection = vscode.languages.createDiagnosticCollection('pydoctest');
@@ -28,8 +29,9 @@ export default class PydoctestLoader {
     }
 
     public getConfiguration(): PydoctestConfiguration {
-        const configuration = {
-            workingDirectory: config.get<string>('workingDirectory', ".")
+        const configuration: PydoctestConfiguration = {
+            workingDirectory: config.get<string>('workingDirectory', "."),
+            pythonInterpreterPath: config.get<string>('pythonInterpreterPath', 'python3')
         };
         return configuration;
     }
@@ -40,6 +42,15 @@ export default class PydoctestLoader {
     }
 
     private async initialize(subscriptions: vscode.Disposable[]): Promise<void> {
+        if (this.pydoctestAnalyzer.configuration.pythonInterpreterPath) {
+            const interpreterExists = await this.pydoctestAnalyzer.pythonInterpreterExists();
+            if (!interpreterExists) {
+                vscode.window.showErrorMessage(`Selected interpreter does not exist: ${this.pydoctestAnalyzer.configuration.pythonInterpreterPath}`);
+                outputChannel.appendLine("Pydoctest: Selected interpreter does not exist")
+                return;
+            }
+        }
+
         const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
         if (!pydoctestExists) {
             vscode.window.showErrorMessage('pydoctest was not found.');
