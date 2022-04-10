@@ -2,6 +2,8 @@
 
 vscode extension for the [Pydoctest](https://github.com/jepperaskdk/pydoctest) python package.
 
+![example_file_vscode](https://user-images.githubusercontent.com/10128260/162624352-6dae9e2d-5067-4625-944e-90266998f7f0.gif)
+
 ## Features
 
 Highlights pydoctest errors, including error-descriptions.
