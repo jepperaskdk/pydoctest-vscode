@@ -77,7 +77,11 @@ export default class PydoctestAnalyzer {
         this.outputChannel.append(`Analyzing ${modulePath}\n`);
         const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath, module: modulePath });
         if (result) {
-            this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
+            if (result.result == ResultType.FAILED) {
+                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
+            } else {
+                this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
+            }
             this.decorate(result, editor);
         }
     }
@@ -90,11 +94,7 @@ export default class PydoctestAnalyzer {
         this.outputChannel.append(`Analyzing workspace: ${workspaceRoot}\n`);
         const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath });
         if (result) {
-            if (result.result == ResultType.FAILED && result.module_results.length > 0) {
-                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
-            } else {
-                this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
-            }
+            this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
             this.decorate(result, null);
         }
     }

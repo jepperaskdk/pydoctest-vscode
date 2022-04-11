@@ -19,7 +19,6 @@ Navigate to settings, search "pydoctest" or add directly to settings.json
 Working directory:
 ```
 "pydoctest.workingDirectory": "path-to-execute-pydoctest",
-"pydoctest.pythonInterpreterPath": "path-to-python-executable"
 ```
 
 ## Issues
