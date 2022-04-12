@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { TaskDefinition } from 'vscode';
 import PydoctestAnalyzer from './analyzer';
+import { IProposedExtensionAPI } from './dependencies/vscode-python';
 
 export interface PydoctestTaskDefinition extends TaskDefinition {
     module: string;
@@ -10,6 +11,7 @@ export interface PydoctestTaskDefinition extends TaskDefinition {
 
 export interface PydoctestConfiguration {
     workingDirectory: string;
+    pythonInterpreterPath?: string | null;
 }
 
 const diagnosticsCollection = vscode.languages.createDiagnosticCollection('pydoctest');
@@ -28,7 +30,7 @@ export default class PydoctestLoader {
     }
 
     public getConfiguration(): PydoctestConfiguration {
-        const configuration = {
+        const configuration: PydoctestConfiguration = {
             workingDirectory: config.get<string>('workingDirectory', ".")
         };
         return configuration;
@@ -36,10 +38,29 @@ export default class PydoctestLoader {
 
     public activate(subscriptions: vscode.Disposable[]): void {
         subscriptions.push(this);
-        this.initialize(subscriptions);
+        this.initialize();
     }
 
-    private async initialize(subscriptions: vscode.Disposable[]): Promise<void> {
+    private async initialize(): Promise<void> {
+        const extension = vscode.extensions.getExtension('ms-python.python');
+        // Check if python-extension is active and if we have a path from there
+        if (extension) {
+            if (!extension.isActive) {
+                await extension.activate();
+            }
+            const api: IProposedExtensionAPI = extension.exports as IProposedExtensionAPI;
+            if (api.environment) {
+                const path = await api.environment.getActiveEnvironmentPath();
+                if (path) {
+                    this.pydoctestAnalyzer.configuration.pythonInterpreterPath = path.path;
+                }
+            }
+
+            api.environment.onDidActiveEnvironmentChanged((listener) => {
+                this.pydoctestAnalyzer.configuration.pythonInterpreterPath = listener.path;
+            });
+        }
+
         const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
         if (!pydoctestExists) {
             vscode.window.showErrorMessage('pydoctest was not found.');
@@ -68,6 +89,7 @@ export default class PydoctestLoader {
             }),
             vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
                 this.configuration = this.getConfiguration();
+                this.initialize();
             })
         );
         this.listenerDisposables = disposables;

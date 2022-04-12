@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { exec } from 'child_process';
 import * as vscode from 'vscode';
 import { PydoctestConfiguration } from './loader';
@@ -48,7 +49,7 @@ function getDiagnosticsItems(result: ValidationResult): PydoctestDiagnosticItem[
 }
 
 interface ExecutionConfiguration {
-    workingDirectory?: string | null;
+    workingDirectory: string;
     module?: string | null;
 }
 
@@ -69,10 +70,18 @@ export default class PydoctestAnalyzer {
         const modulePath = editor.document.fileName;
         if (!modulePath.endsWith('.py')) return;
 
+        const workspaceRoots: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders;
+        const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.'
+        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.')
+
         this.outputChannel.append(`Analyzing ${modulePath}\n`);
-        const result = await this.executeGetResult({ module: modulePath });
+        const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath, module: modulePath });
         if (result) {
-            this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
+            if (result.result == ResultType.FAILED) {
+                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
+            } else {
+                this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
+            }
             this.decorate(result, editor);
         }
     }
@@ -80,25 +89,32 @@ export default class PydoctestAnalyzer {
     public async analyzeWorkspace(): Promise<void> {
         const workspaceRoots: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders;
         const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.'
+        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.')
 
         this.outputChannel.append(`Analyzing workspace: ${workspaceRoot}\n`);
-        const result = await this.executeGetResult({ workingDirectory: workspaceRoot });
+        const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath });
         if (result) {
-            if (result.result == ResultType.FAILED && result.module_results.length > 0) {
-                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
-            } else {
-                this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
-            }
+            this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
             this.decorate(result, null);
         }
     }
 
     public async executeGetResult(config: ExecutionConfiguration): Promise<ValidationResult | null> {
-        let command = 'pydoctest --reporter json';
+        // Assume we're using the system-wide pydoctest (or otherhow on path)
+        let command = 'pydoctest';
+
+        // Optionally invoke the python executable specified in config
+        if (this.configuration.pythonInterpreterPath) {
+            command = `${this.configuration.pythonInterpreterPath} -m pydoctest.main`
+        }
+
+        command += ' --reporter json'
+
         if (config.module) {
             command += ` --file ${config.module}`;
         }
-        const result = await this.executeAsync(command, config.workingDirectory ?? '.');
+
+        const result = await this.executeAsync(command, config.workingDirectory);
         const obj: ValidationResult = JSON.parse(result);
         return obj;
     }
@@ -125,5 +141,12 @@ export default class PydoctestAnalyzer {
         this.outputChannel.append('Testing if pydoctest is installed..');
         const result = await this.executeAsync('pydoctest -h', '.');
         return result.includes('usage: pydoctest');
+    }
+
+    public async pythonInterpreterExists(): Promise<boolean> {
+        this.outputChannel.append('Testing if selected interpreter exists..');
+        const result = await this.executeAsync(`${this.configuration.pythonInterpreterPath} -h`, '.');
+        // TODO: Would be good to check return code also. We can't check for 'usage: python' below, since it may include full path to python
+        return result.includes('usage: ');
     }
 }
