@@ -18,7 +18,8 @@
         "Other"
     ],
     "activationEvents": [
-        "*"
+        "onCommand:pydoctest.analyzeWorkspace",
+        "onStartupFinished"
     ],
     "main": "./out/extension.js",
     "contributes": {
@@ -31,6 +32,13 @@
                         "description": "The python module."
                     }
                 }
+            }
+        ],
+        "commands":[
+            {
+                "command": "pydoctest.analyzeWorkspace",
+                "title": "Analyze workspace",
+                "category": "Pydoctest"
             }
         ],
         "configuration": {

@@ -38,10 +38,10 @@ export default class PydoctestLoader {
 
     public activate(subscriptions: vscode.Disposable[]): void {
         subscriptions.push(this);
-        this.initialize();
+        this.initialize(subscriptions);
     }
 
-    private async initialize(): Promise<void> {
+    private async initialize(subscriptions: vscode.Disposable[]): Promise<void> {
         const extension = vscode.extensions.getExtension('ms-python.python');
         // Check if python-extension is active and if we have a path from there
         if (extension) {
@@ -56,26 +56,39 @@ export default class PydoctestLoader {
                 }
             }
 
-            api.environment.onDidActiveEnvironmentChanged((listener) => {
-                this.pydoctestAnalyzer.configuration.pythonInterpreterPath = listener.path;
-            });
+            if (api.environment.onDidActiveEnvironmentChanged) {
+                api.environment.onDidActiveEnvironmentChanged((listener) => {
+                    this.pydoctestAnalyzer.configuration.pythonInterpreterPath = listener.path;
+                });
+            } else if (api.environment.onDidChangeActiveEnvironmentPath) {
+                api.environment.onDidChangeActiveEnvironmentPath((listener) => {
+                    this.pydoctestAnalyzer.configuration.pythonInterpreterPath = listener.path;
+                });
+            }
         }
 
         const pydoctestExists = await this.pydoctestAnalyzer.pydoctestExists();
         if (!pydoctestExists) {
             vscode.window.showErrorMessage('pydoctest was not found.');
-            outputChannel.appendLine("Pydoctest not found")
+            outputChannel.appendLine("Pydoctest not found");
             return;
         }
 
+        this.registerCommands(subscriptions);
         this.registerEventListeners();
         this.analyzeActiveEditors();
 
         this.pydoctestAnalyzer.analyzeWorkspace();
     }
 
+    private registerCommands(subscriptions: vscode.Disposable[]): void {
+        subscriptions.push(
+            vscode.commands.registerCommand('pydoctest.analyzeWorkspace', this.pydoctestAnalyzer.analyzeWorkspace, this.pydoctestAnalyzer),
+        );
+    }
+
     private registerEventListeners(): void {
-        let disposables: vscode.Disposable[] = []
+        let disposables: vscode.Disposable[] = [];
         disposables.push(
             vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
                 if (editor !== undefined) {
@@ -83,13 +96,13 @@ export default class PydoctestLoader {
                 }
             }),
             vscode.workspace.onDidSaveTextDocument((document: vscode.TextDocument) => {
-                if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document == document) {
+                if (vscode.window.activeTextEditor !== undefined && vscode.window.activeTextEditor.document === document) {
                     this.pydoctestAnalyzer.analyzeEditor(vscode.window.activeTextEditor);
                 }
             }),
             vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
                 this.configuration = this.getConfiguration();
-                this.initialize();
+                this.initialize(disposables);
             })
         );
         this.listenerDisposables = disposables;
@@ -105,40 +118,7 @@ export default class PydoctestLoader {
         if (this.listenerDisposables !== undefined) {
             this.listenerDisposables.forEach(disposable => {
                 disposable.dispose();
-            })
+            });
         }
     }
-}
-
-class PydoctestBuildTaskTerminal implements vscode.Pseudoterminal {
-	private writeEmitter = new vscode.EventEmitter<string>();
-	onDidWrite: vscode.Event<string> = this.writeEmitter.event;
-	private closeEmitter = new vscode.EventEmitter<number>();
-	onDidClose?: vscode.Event<number> = this.closeEmitter.event;
-
-	private fileWatcher: vscode.FileSystemWatcher | undefined;
-
-	constructor(private workspaceRoot: string) {
-	}
-
-	open(initialDimensions: vscode.TerminalDimensions | undefined): void {
-		this.doAnalyze();
-	}
-
-	close(): void {
-		if (this.fileWatcher) {
-			this.fileWatcher.dispose();
-		}
-	}
-
-	private async doAnalyze(): Promise<void> {
-		return new Promise<void>((resolve) => {
-			this.writeEmitter.fire('Starting build...\r\n');
-
-            // this.setSharedState(date.toTimeString() + ' ' + date.toDateString());
-            this.writeEmitter.fire('Build complete.\r\n\r\n');
-            this.closeEmitter.fire(0);
-            resolve();
-		});
-	}
 }

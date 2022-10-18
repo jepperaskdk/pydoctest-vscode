@@ -1,4 +1,4 @@
-import { Event, Uri } from "vscode";
+import { Event, Uri, WorkspaceFolder } from "vscode";
 
 export type Resource = Uri | undefined;
 
@@ -24,6 +24,26 @@ export interface ActiveEnvironmentChangedParams {
     resource?: Uri;
 }
 
+export type ActiveEnvironmentPathChangeEvent = EnvironmentPath & {
+    /**
+     * Workspace folder the environment changed for.
+     */
+    readonly resource: WorkspaceFolder | undefined;
+};
+
+export type EnvironmentPath = {
+    /**
+     * The ID of the environment.
+     */
+    readonly id: string;
+    /**
+     * Path to environment folder or path to python executable that uniquely identifies an environment. Environments
+     * lacking a python executable are identified by environment folder paths, whereas other envs can be identified
+     * using python executable path.
+     */
+    readonly path: string;
+};
+
 export interface IProposedExtensionAPI {
     environment: {
         /**
@@ -37,8 +57,13 @@ export interface IProposedExtensionAPI {
         getActiveEnvironmentPath(resource?: Resource): Promise<EnvPathType | undefined>;
 
         /**
-         * This event is triggered when the active environment changes.
+         * @deprecated This event is triggered when the active environment changes.
          */
         onDidActiveEnvironmentChanged: Event<ActiveEnvironmentChangedParams>;
+
+        /**
+         * This event is triggered when the active environment setting changes.
+         */
+         readonly onDidChangeActiveEnvironmentPath: Event<ActiveEnvironmentPathChangeEvent>;
     }
 }

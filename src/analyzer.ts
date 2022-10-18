@@ -13,29 +13,31 @@ interface PydoctestDiagnosticItem {
 
 function getDiagnosticsItems(result: ValidationResult): PydoctestDiagnosticItem[] {
     const items: PydoctestDiagnosticItem[] = [];
-    if (result.result != ResultType.FAILED) return [];
+    if (result.result !== ResultType.FAILED) {
+        return [];
+    }
 
-    result.module_results.forEach(m_r => {
+    result.module_results.forEach(mr => {
         const moduleResult: PydoctestDiagnosticItem = {
-            uri: vscode.Uri.file(m_r.module_path),
+            uri: vscode.Uri.file(mr.module_path),
             diagnosticItems: []
         };
 
-        if (m_r.result == ResultType.FAILED) {
-            m_r.function_results.forEach(fn_r => {
-                if (fn_r.result == ResultType.FAILED && fn_r.range) {
-                    const range = new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, 80);
-                    const item = new vscode.Diagnostic(range, fn_r.fail_reason, vscode.DiagnosticSeverity.Error);
+        if (mr.result === ResultType.FAILED) {
+            mr.function_results.forEach(fnr => {
+                if (fnr.result === ResultType.FAILED && fnr.range) {
+                    const range = new vscode.Range(fnr.range.start_line - 1, fnr.range.start_character, fnr.range.end_line - 1, 80);
+                    const item = new vscode.Diagnostic(range, fnr.fail_reason, vscode.DiagnosticSeverity.Error);
                     moduleResult.diagnosticItems.push(item);
                 }
             });
 
-            m_r.class_results.forEach(cl_r => {
-                if (cl_r.result == ResultType.FAILED) {
-                    cl_r.function_results.forEach(fn_r => {
-                        if (fn_r.result == ResultType.FAILED && fn_r.range) {
-                            const range = new vscode.Range(fn_r.range.start_line - 1, fn_r.range.start_character, fn_r.range.end_line - 1, 80);
-                            const item = new vscode.Diagnostic(range, fn_r.fail_reason, vscode.DiagnosticSeverity.Error);
+            mr.class_results.forEach(clr => {
+                if (clr.result === ResultType.FAILED) {
+                    clr.function_results.forEach(fnr => {
+                        if (fnr.result === ResultType.FAILED && fnr.range) {
+                            const range = new vscode.Range(fnr.range.start_line - 1, fnr.range.start_character, fnr.range.end_line - 1, 80);
+                            const item = new vscode.Diagnostic(range, fnr.fail_reason, vscode.DiagnosticSeverity.Error);
                             moduleResult.diagnosticItems.push(item);
                         }
                     });
@@ -56,46 +58,57 @@ interface ExecutionConfiguration {
 export default class PydoctestAnalyzer {
     constructor(public outputChannel: vscode.OutputChannel, public diagnosticsCollection: vscode.DiagnosticCollection, public configuration: PydoctestConfiguration) {}
 
-    private decorate(result: ValidationResult, editor: vscode.TextEditor | null): void {
-        this.diagnosticsCollection.clear();
-        if (editor) {
-            const diagnosticItems = getDiagnosticsItems(result);
-            diagnosticItems.forEach(i => {
-                this.diagnosticsCollection.set(i.uri, i.diagnosticItems);
+    private decorate(result: ValidationResult, clearExisting: boolean): void {
+        if (clearExisting) {
+            // Clear all existing results
+            this.diagnosticsCollection.clear();
+        } else {
+            // Clear existing results for modules analyzed in this result
+            result.module_results.forEach(mr => {
+                this.diagnosticsCollection.delete(vscode.Uri.file(mr.module_path));
             });
         }
+
+        // Get new results
+        const diagnosticItems = getDiagnosticsItems(result);
+        diagnosticItems.forEach(i => {
+            this.diagnosticsCollection.set(i.uri, i.diagnosticItems);
+        });
     }
 
     public async analyzeEditor(editor: vscode.TextEditor): Promise<void> {
         const modulePath = editor.document.fileName;
-        if (!modulePath.endsWith('.py')) return;
+        if (!modulePath.endsWith('.py')) {
+            return;
+        }
 
         const workspaceRoots: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders;
-        const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.'
-        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.')
+        const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.';
+        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.');
 
         this.outputChannel.append(`Analyzing ${modulePath}\n`);
         const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath, module: modulePath });
         if (result) {
-            if (result.result == ResultType.FAILED) {
-                this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
-            } else {
-                this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
-            }
-            this.decorate(result, editor);
+            this.outputChannel.append("Finished\n");
+            // if (result.result == ResultType.FAILED) {
+            //     this.outputChannel.append(`Result (failed) was: ${JSON.stringify(result)}\n`)
+            // } else {
+            //     this.outputChannel.append(`Result was: ${ResultType[result?.result]} (${modulePath})\n`)
+            // }
+            this.decorate(result, false);
         }
     }
 
     public async analyzeWorkspace(): Promise<void> {
         const workspaceRoots: readonly vscode.WorkspaceFolder[] | undefined = vscode.workspace.workspaceFolders;
-        const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.'
-        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.')
+        const workspaceRoot = workspaceRoots ? workspaceRoots[0].uri.fsPath : '.';
+        const workingDirectoryPath = path.resolve(workspaceRoot, this.configuration.workingDirectory ?? '.');
 
         this.outputChannel.append(`Analyzing workspace: ${workspaceRoot}\n`);
         const result = await this.executeGetResult({ workingDirectory: workingDirectoryPath });
         if (result) {
-            this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`)
-            this.decorate(result, null);
+            this.outputChannel.append(`Result was: ${ResultType[result?.result]}\n`);
+            this.decorate(result, true);
         }
     }
 
@@ -105,10 +118,10 @@ export default class PydoctestAnalyzer {
 
         // Optionally invoke the python executable specified in config
         if (this.configuration.pythonInterpreterPath) {
-            command = `${this.configuration.pythonInterpreterPath} -m pydoctest.main`
+            command = `${this.configuration.pythonInterpreterPath} -m pydoctest.main`;
         }
 
-        command += ' --reporter json'
+        command += ' --reporter json';
 
         if (config.module) {
             command += ` --file ${config.module}`;
